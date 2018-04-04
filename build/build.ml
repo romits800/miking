@@ -31,7 +31,7 @@ let rec cmd s =
 and cleanup_temp_files() =
   maindir();
   chdir bootdir;
-  rmfiles "*.cmi *.cmx *.o lexer.ml parser.ml parser.mli";
+  rmfiles "*.cmo *.cmi *.cmx *.o lexer.ml parser.ml parser.mli ppllexer.ml pplparser.ml pplparser.mli";
   maindir()
 
 
@@ -104,11 +104,15 @@ let build_bootstrappers() =
     flush_all();
     chdir bootdir;
     cmd "ocamllex lexer.mll";
+    cmd "ocamllex ppllexer.mll";
     cmd "ocamlyacc parser.mly";
+    cmd "ocamlyacc pplparser.mly";
     cmd ("ocamlopt -o .." ^ sl ^ ".." ^ sl ^
           builddir ^ sl ^ "boot utils.ml " ^
           "ustring.mli ustring.ml msg.ml ast.ml parser.mli lexer.ml " ^
-          "parser.ml boot.ml"))
+          "parser.ml " ^ 
+          "pprint.ml pplparser.mli ppllexer.ml pplparser.ml ppl.ml " ^
+          "boot.ml"))
   else (
     cmd ("ocamlbuild -Is src/boot boot.native");
     cmd ("mv -f boot.native build/boot");
