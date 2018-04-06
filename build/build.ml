@@ -98,20 +98,23 @@ let should_recompile_bootstrappers() =
     s1 <> s2
 
 let build_bootstrappers() =
-  if win32 || command "ocamlbuild -version > /dev/null 2>&1" != 0 then (
+  if true || win32 || command "ocamlbuild -version > /dev/null 2>&1" != 0 then (
     (* boot *)
     printf "Building boot...\n";
     flush_all();
     chdir bootdir;
     cmd "ocamllex lexer.mll";
     cmd "ocamllex ppllexer.mll";
+    cmd "ocamllex parlexer.mll";
     cmd "ocamlyacc parser.mly";
     cmd "ocamlyacc pplparser.mly";
+    cmd "ocamlyacc parparser.mly";
     cmd ("ocamlopt -o .." ^ sl ^ ".." ^ sl ^
           builddir ^ sl ^ "boot utils.ml " ^
           "ustring.mli ustring.ml msg.ml ast.ml parser.mli lexer.ml " ^
           "parser.ml " ^ 
           "pprint.ml pplparser.mli ppllexer.ml pplparser.ml ppl.ml " ^
+          "parparser.mli parlexer.ml parparser.ml par.ml " ^
           "boot.ml"))
   else (
     cmd ("ocamlbuild -Is src/boot boot.native");

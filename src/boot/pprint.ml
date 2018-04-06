@@ -145,6 +145,10 @@ and pprint_const c =
   | CAtom(id,tms) -> us"[" ^. (ustring_of_sid id) ^. us"]" ^.
       (if List.length tms = 0 then us""
        else us"(" ^. Ustring.concat (us",") (List.map (pprint true) tms) ^. us")")
+  (* Parallel temp struct *)
+  | Clater(_,_) -> us"Clater"
+  | Cnow(_)-> us"Cnow"
+  | CDelayed(_) -> us"CDelayed"
 
 (* Pretty print a term. The boolean parameter 'basic' is true when
    the pretty printing should be done in basic form. Use e.g. Set(1,2) instead of {1,2} *)

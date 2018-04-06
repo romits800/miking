@@ -404,6 +404,10 @@ let delta c v  =
     (* Atom - an untyped lable that can be used to implement
        domain specific constructs *)
     | CAtom(id,tms),t -> !eval_atom (tm_info t) id tms t
+  (* Parallel temp struct *)
+    | Clater(_,_),t -> fail_constapp (tm_info t)
+    | Cnow(_),t-> fail_constapp (tm_info t)
+    | CDelayed(_),t -> fail_constapp (tm_info t)
 
 
 
@@ -711,6 +715,8 @@ let main =
       if Ustring.ends_with (us".ppl") (us name) then
         (eval_atom := Ppl.eval_atom;
          (Ppl.evalprog debruijn eval builtin) name)
+      else if Ustring.ends_with (us".par") (us name) then
+        (Par.evalprog name)
       else evalprog name)
 
   (* Show the menu *)

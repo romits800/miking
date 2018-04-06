@@ -100,6 +100,11 @@ and const =
    domain specific constructs *)
 | CAtom of sid * tm list
 
+(* Parallel - *)
+| CDelayed of tm ref 
+| Cnow of tm ref  option 
+| Clater of int * tm option
+
 (* Tells if a variable is a pe variable or if a closure is a pe closure *)
 and pemode = bool
 
@@ -111,6 +116,8 @@ and tm =
 | TmApp         of info * tm * tm
 | TmConst       of info * const
 | TmPEval       of info
+| TmLater       of info
+| TmNow         of info
 | TmIfexp       of info * bool option * tm option
 | TmFix         of info
 
@@ -148,6 +155,9 @@ let tm_info t =
   | TmMatch(fi,_,_) -> fi
   | TmNop -> NoInfo
 
+  | TmLater(fi) -> fi
+  | TmNow(fi) -> fi
+                   
 (* Returns the number of expected arguments *)
 let arity c =
   match c with
@@ -199,6 +209,11 @@ let arity c =
   (* Atom - an untyped lable that can be used to implement
      domain specific constructs *)
   | CAtom(_,_)     -> 0
+  (* Parallel temp functions *)
+  | Clater(_,_)    -> 1
+  | Cnow(_)        -> 0
+  | CDelayed(_)    -> 1
+                        
 
 
 type 'a tokendata = {i:info; v:'a}
