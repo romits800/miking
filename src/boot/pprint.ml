@@ -146,8 +146,8 @@ and pprint_const c =
       (if List.length tms = 0 then us""
        else us"(" ^. Ustring.concat (us",") (List.map (pprint true) tms) ^. us")")
   (* Parallel temp struct *)
-  | Clater(_,_) -> us"Clater"
-  | Cnow(_)-> us"Cnow"
+  | Clater(_) -> us"Clater"
+  | Cnow -> us"Cnow"
   | CDelayed(_) -> us"CDelayed"
 
 (* Pretty print a term. The boolean parameter 'basic' is true when

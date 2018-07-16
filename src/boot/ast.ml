@@ -101,9 +101,10 @@ and const =
 | CAtom of sid * tm list
 
 (* Parallel - *)
-| CDelayed of tm ref 
-| Cnow of tm ref  option 
-| Clater of int * tm option
+| CDelayed of float * tm Domain.t * env 
+(* | CDelayed of float * Domain.id * env *) 
+| Cnow (* of tm ref  option *) 
+| Clater of float option (* int * tm option *)
 
 (* Tells if a variable is a pe variable or if a closure is a pe closure *)
 and pemode = bool
@@ -116,7 +117,7 @@ and tm =
 | TmApp         of info * tm * tm
 | TmConst       of info * const
 | TmPEval       of info
-| TmLater       of info
+| TmLater       of info * float option
 | TmNow         of info
 | TmIfexp       of info * bool option * tm option
 | TmFix         of info
@@ -155,7 +156,7 @@ let tm_info t =
   | TmMatch(fi,_,_) -> fi
   | TmNop -> NoInfo
 
-  | TmLater(fi) -> fi
+  | TmLater(fi,_) -> fi
   | TmNow(fi) -> fi
                    
 (* Returns the number of expected arguments *)
@@ -210,9 +211,9 @@ let arity c =
      domain specific constructs *)
   | CAtom(_,_)     -> 0
   (* Parallel temp functions *)
-  | Clater(_,_)    -> 1
-  | Cnow(_)        -> 0
-  | CDelayed(_)    -> 1
+  | Clater(_)    -> 2
+  | Cnow         -> 1
+  | CDelayed(_)  -> 0
                         
 
 

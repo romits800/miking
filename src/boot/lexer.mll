@@ -15,6 +15,10 @@
   exception Lex_error of Msg.message
 
 let reserved_strings = [
+  (* Parallelization primitives *)
+  ("later", 	    fun(i) -> Parser.LATER{i=i;v=()});
+  ("now", 	    fun(i) -> Parser.NOW{i=i;v=()});
+    		    
   (* Keywords *)
   ("fun",           fun(i) -> Parser.FUNC{i=i;v=()});
   ("def",           fun(i) -> Parser.DEF{i=i;v=()});

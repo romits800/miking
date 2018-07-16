@@ -1,12 +1,9 @@
-
 (*
    Miking is licensed under the MIT license.
    Copyright (C) David Broman. See file LICENSE.txt
 
-   boot.ml is the main entry point for first stage of the
-   bootstrapped Miking compiler. The bootstapper is interpreted and
-   implemented in OCaml. Note that the Miking bootstrapper
-   only implements a subset of the Ragnar language.
+   The main experiment platform for parallelization.
+   Main contributer: Romy Tsoupidi
 *)
 
 
@@ -15,10 +12,62 @@ open Ustring.Op
 open Printf
 open Ast
 open Msg
+open Printf
 open Pprint
+(* open Lazy *)
 
+(* open Unix *)
 
 let prog_argv = ref []          (* Argv for the program that is executed *)
+
+module DelayedMap = Map.Make(struct type t = tm Domain.t
+                              let compare = compare end)
+          
+type dmap = (tm option Atomic.t) DelayedMap.t 
+              
+(* type delayedmap = { lab: int; dm: dmap} *)
+
+let get_time () =
+    Unix.gettimeofday()
+                    
+(* let dm = ref {lab=0; dm=DelayedMap.empty} *)
+(* let dmready = ref DelayedMap.empty *)
+
+
+
+(* let eval_dt f t env l =
+ *   let tm = f env t in
+ *   dmready := DelayedMap.add l (Atomic.make t) !dmready *)
+      
+let insert_dt f t =
+    Domain.spawn (fun () -> f t)
+
+(* let find_ready l =
+ *   try
+ *     Some (Atomic.get (DelayedMap.find l !dmready))
+ *   with Not_found -> None *)
+
+          
+let delayedmap = ref DelayedMap.empty
+
+let find_dm d =
+  Atomic.get (DelayedMap.find d !delayedmap)
+  (* try
+   *   Some (Atomic.get (DelayedMap.find d !delayedmap))
+   * with Not_found -> None *)
+
+let add_dm d tm =
+  (* let l = Domain.get_id d in *)
+  delayedmap := DelayedMap.add d (Atomic.make tm) !delayedmap
+                      
+(* let find_dt l =
+ *   try
+ *     Some (Atomic.get (DelayedMap.find l !dm.dm))
+ *   with Not_found -> None *)
+
+
+(* let readymap = ref DelayedMap.empty *)
+
 
 (* Debug options *)
 let enable_debug_normalize = false
@@ -75,6 +124,8 @@ let rec debruijn env t =
   | TmConst(_,_) -> t
   | TmFix(_) -> t
   | TmPEval(_) -> t
+  | TmNow(_) -> t
+  | TmLater(_,_) -> t
   | TmIfexp(_,_,_) -> t
   | TmChar(_,_) -> t
   | TmExprSeq(fi,t1,t2) -> TmExprSeq(fi,debruijn env t1,debruijn env t2)
@@ -192,9 +243,9 @@ let debug_normalize env n t =
 let debug_eval env t =
   if enable_debug_eval then
     (printf "\n-- eval -- \n";
-     uprint_endline (pprint true t);
-     if enable_debug_eval_env then
-        uprint_endline (pprint_env env))
+  uprint_endline (pprint true t);
+  if enable_debug_eval_env then
+    uprint_endline (pprint_env env))
   else ()
 
 (* Debug function used after partial evaluation *)
@@ -230,16 +281,24 @@ let builtin =
    The reason for this is that if-expressions return expressions
    and not values. *)
 let delta c v  =
-    match c,v with
+  match c,v with
+    | Clater(None), TmConst(fi, CFloat(f)) ->
+       TmConst(fi, Clater(Some(f)))
+    | Clater(None), t  -> fail_constapp (tm_info t)
+    | Clater(_), t -> fail_constapp (tm_info t) 
+    (* | Cnow, TmConst(fi, CDelayed(f,l,env)) ->
+     *    Domain.join l *)
+    | Cnow, t ->  fail_constapp (tm_info t)
+    | CDelayed(f,l,env),t-> fail_constapp (tm_info t) 
     (* MCore boolean intrinsics *)
     | CBool(_),t -> fail_constapp (tm_info t)
 
     | Cnot,TmConst(fi,CBool(v)) -> TmConst(fi,CBool(not v))
-    | Cnot,t -> fail_constapp (tm_info t)
+    | Cnot,t ->  fail_constapp (tm_info t)
 
     | Cand(None),TmConst(fi,CBool(v)) -> TmConst(fi,Cand(Some(v)))
     | Cand(Some(v1)),TmConst(fi,CBool(v2)) -> TmConst(fi,CBool(v1 && v2))
-    | Cand(None),t | Cand(Some(_)),t  -> fail_constapp (tm_info t)
+    | Cand(None),t | Cand(Some(_)),t  ->   fail_constapp (tm_info t)
 
     | Cor(None),TmConst(fi,CBool(v)) -> TmConst(fi,Cor(Some(v)))
     | Cor(Some(v1)),TmConst(fi,CBool(v2)) -> TmConst(fi,CBool(v1 || v2))
@@ -254,7 +313,7 @@ let delta c v  =
 
     | Csubi(None),TmConst(fi,CInt(v)) -> TmConst(fi,Csubi(Some(v)))
     | Csubi(Some(v1)),TmConst(fi,CInt(v2)) -> TmConst(fi,CInt(v1 - v2))
-    | Csubi(None),t | Csubi(Some(_)),t  -> fail_constapp (tm_info t)
+    | Csubi(None),t | Csubi(Some(_)),t  ->  fail_constapp (tm_info t)
 
     | Cmuli(None),TmConst(fi,CInt(v)) -> TmConst(fi,Cmuli(Some(v)))
     | Cmuli(Some(v1)),TmConst(fi,CInt(v2)) -> TmConst(fi,CInt(v1 * v2))
@@ -262,14 +321,14 @@ let delta c v  =
 
     | Cdivi(None),TmConst(fi,CInt(v)) -> TmConst(fi,Cdivi(Some(v)))
     | Cdivi(Some(v1)),TmConst(fi,CInt(v2)) -> TmConst(fi,CInt(v1 / v2))
-    | Cdivi(None),t | Cdivi(Some(_)),t  -> fail_constapp (tm_info t)
+    | Cdivi(None),t | Cdivi(Some(_)),t  ->fail_constapp (tm_info t)
 
     | Cmodi(None),TmConst(fi,CInt(v)) -> TmConst(fi,Cmodi(Some(v)))
     | Cmodi(Some(v1)),TmConst(fi,CInt(v2)) -> TmConst(fi,CInt(v1 mod v2))
     | Cmodi(None),t | Cmodi(Some(_)),t  -> fail_constapp (tm_info t)
 
     | Cnegi,TmConst(fi,CInt(v)) -> TmConst(fi,CInt((-1)*v))
-    | Cnegi,t -> fail_constapp (tm_info t)
+    | Cnegi,t ->  fail_constapp (tm_info t)
 
     | Clti(None),TmConst(fi,CInt(v)) -> TmConst(fi,Clti(Some(v)))
     | Clti(Some(v1)),TmConst(fi,CInt(v2)) -> TmConst(fi,CBool(v1 < v2))
@@ -289,11 +348,11 @@ let delta c v  =
 
     | Ceqi(None),TmConst(fi,CInt(v)) -> TmConst(fi,Ceqi(Some(v)))
     | Ceqi(Some(v1)),TmConst(fi,CInt(v2)) -> TmConst(fi,CBool(v1 = v2))
-    | Ceqi(None),t | Ceqi(Some(_)),t  -> fail_constapp (tm_info t)
+    | Ceqi(None),t | Ceqi(Some(_)),t  ->  fail_constapp (tm_info t)
 
     | Cneqi(None),TmConst(fi,CInt(v)) -> TmConst(fi,Cneqi(Some(v)))
     | Cneqi(Some(v1)),TmConst(fi,CInt(v2)) -> TmConst(fi,CBool(v1 <> v2))
-    | Cneqi(None),t | Cneqi(Some(_)),t  -> fail_constapp (tm_info t)
+    | Cneqi(None),t | Cneqi(Some(_)),t  ->  fail_constapp (tm_info t)
 
     | Cslli(None),TmConst(fi,CInt(v)) -> TmConst(fi,Cslli(Some(v)))
     | Cslli(Some(v1)),TmConst(fi,CInt(v2)) -> TmConst(fi,CInt(v1 lsl v2))
@@ -308,11 +367,11 @@ let delta c v  =
     | Csrai(None),t | Csrai(Some(_)),t  -> fail_constapp (tm_info t)
 
     (* MCore intrinsic: Floating-point number constant and operations *)
-    | CFloat(_),t -> fail_constapp (tm_info t)
+    | CFloat(_),t ->  fail_constapp (tm_info t)
 
     | Caddf(None),TmConst(fi,CFloat(v)) -> TmConst(fi,Caddf(Some(v)))
     | Caddf(Some(v1)),TmConst(fi,CFloat(v2)) -> TmConst(fi,CFloat(v1 +. v2))
-    | Caddf(None),t | Caddf(Some(_)),t  -> fail_constapp (tm_info t)
+    | Caddf(None),t | Caddf(Some(_)),t  ->  fail_constapp (tm_info t)
 
     | Csubf(None),TmConst(fi,CFloat(v)) -> TmConst(fi,Csubf(Some(v)))
     | Csubf(Some(v1)),TmConst(fi,CFloat(v2)) -> TmConst(fi,CFloat(v1 -. v2))
@@ -337,7 +396,7 @@ let delta c v  =
     | Cadd(TFloat(v1)),TmConst(fi,CFloat(v2)) -> TmConst(fi,CFloat(v1 +. v2))
     | Cadd(TFloat(v1)),TmConst(fi,CInt(v2)) -> TmConst(fi,CFloat(v1 +. (float_of_int v2)))
     | Cadd(TInt(v1)),TmConst(fi,CFloat(v2)) -> TmConst(fi,CFloat((float_of_int v1) +. v2))
-    | Cadd(_),t -> fail_constapp (tm_info t)
+    | Cadd(_),t ->  fail_constapp (tm_info t)
 
     | Csub(TNone),TmConst(fi,CInt(v)) -> TmConst(fi,Csub(TInt(v)))
     | Csub(TNone),TmConst(fi,CFloat(v)) -> TmConst(fi,Csub(TFloat(v)))
@@ -404,10 +463,6 @@ let delta c v  =
     (* Atom - an untyped lable that can be used to implement
        domain specific constructs *)
     | CAtom(id,tms),t -> !eval_atom (tm_info t) id tms t
-  (* Parallel temp struct *)
-    | Clater(_,_),t -> fail_constapp (tm_info t)
-    | Cnow(_),t-> fail_constapp (tm_info t)
-    | CDelayed(_),t -> fail_constapp (tm_info t)
 
 
 
@@ -461,6 +516,7 @@ let rec readback env n t =
   | TmApp(fi,t1,t2) -> optimize_const_app fi (readback env n t1) (readback env n t2)
   (* Constant, fix, and PEval  *)
   | TmConst(_,_) | TmFix(_) | TmPEval(_) -> t
+  | TmLater(_,_) | TmNow(_) -> t
   (* If expression *)
   | TmIfexp(fi,x,Some(t3)) -> TmIfexp(fi,x,Some(readback env n t3))
   | TmIfexp(fi,x,None) -> TmIfexp(fi,x,None)
@@ -503,7 +559,7 @@ let rec normalize env n t =
     (* Constant application using the delta function *)
     | TmConst(fi1,c1) ->
         (match normalize env n t2 with
-        | TmConst(fi2,c2) as tt-> delta c1 tt
+        | TmConst(fi2,c2) as tt->  delta c1 tt
         | nf -> TmApp(fi,TmConst(fi1,c1),nf))
     (* Partial evaluation *)
     | TmPEval(fi) ->
@@ -531,6 +587,7 @@ let rec normalize env n t =
     | v1 -> TmApp(fi,v1,normalize env n t2))
   (* Constant, fix, and Peval  *)
   | TmConst(_,_) | TmFix(_) | TmPEval(_) -> t
+  | TmLater(_) | TmNow(_) -> t
   (* If expression *)
   | TmIfexp(_,_,_) -> t  (* TODO!!!!!! *)
   (* Other old, to remove *)
@@ -546,6 +603,39 @@ let rec normalize env n t =
 
 
 
+
+(* Define the file slash, to make it platform independent *)
+let sl = if Sys.win32 then "\\" else "/"
+
+(* Add a slash at the end "\\" or "/" if not already available *)
+let add_slash s =
+  if String.length s = 0 || (String.sub s (String.length s - 1) 1) <> sl
+  then s ^ sl else s
+
+(* Expand a list of files and folders into a list of file names *)
+let files_of_folders lst = List.fold_left (fun a v ->
+  if Sys.is_directory v then
+    (Sys.readdir v
+        |> Array.to_list
+        |> List.filter (fun x -> not (String.length x >= 1 && String.get x 0 = '.'))
+        |> List.map (fun x -> (add_slash v) ^ x)
+        |> List.filter (fun x -> not (Sys.is_directory x))
+    ) @ a
+  else v::a
+) [] lst
+
+
+let count = ref 0
+
+let inc_count () =
+  count := !count + 1
+
+let count_threads = ref 0
+
+let inc_count_threads () =
+  count_threads := !count_threads + 1
+
+
 (* Main evaluation loop of a term. Evaluates using big-step semantics *)
 let rec eval env t =
   debug_eval env t;
@@ -556,31 +646,63 @@ let rec eval env t =
   | TmLam(fi,x,t1) -> TmClos(fi,x,t1,env,false)
   | TmClos(fi,x,t1,env2,_) -> t
   (* Application *)
+  | TmConst(_,CDelayed(f,d,env)) ->
+     (try
+       let res = find_dm d in
+       match res with
+       | None ->
+          let res = Domain.join d in
+          add_dm d (Some res);
+          res
+       | Some tm -> tm
+      with _ ->
+            failwith ("CDelayed error");
+     )
+         
   | TmApp(fi,t1,t2) ->
-      (match eval env t1 with
-       (* Closure application *)
-       | TmClos(fi,x,t3,env2,_) -> eval ((eval env t2)::env2) t3
-       (* Constant application using the delta function *)
-       | TmConst(fi,c) -> delta c (eval env t2)
-       (* Partial evaluation *)
-       | TmPEval(fi2) -> normalize env 0 (TmApp(fi,TmPEval(fi2),t2))
-           |> readback env 0 |> debug_after_peval |> eval env
+     (match eval env t1 with
+      (* Closure application *)
+      | TmClos(fi,x,t3,env2,_) ->
+         let tn = eval env t2 in
+         eval (tn::env2) t3
+      (* Constant application using the delta function *)
+      | TmConst(_,Clater(Some f)) ->
+         (
+            try
+              let d = insert_dt (fun t -> eval env t) t2  in
+              add_dm d None;
+              (* let id_d = Domain.get_id l *)
+                           
+              inc_count_threads();
+              TmConst (fi, CDelayed (f, d, env))
+            with _ ->
+              eval env t2
+          )
+       (* (match eval env t2 with
+           * | TmClos(fi, s, t2, env,_) ->
+           *    let l = insert_dt (fun t2 -> eval (TmNop::env) t2) t2  in
+           *    TmConst(fi, CDelayed (f, l, env))
+           * | v2 -> delta (Clater (Some f)) v2) *)
+      | TmConst(fi,c) -> delta c (eval env t2)
+      (* Partial evaluation *)
+      | TmPEval(fi2) -> normalize env 0 (TmApp(fi,TmPEval(fi2),t2))
+                        |> readback env 0 |> debug_after_peval |> eval env
        (* Fix *)
-       | TmFix(fi) ->
+      | TmFix(fi) ->
          (match eval env t2 with
-         | TmClos(fi,x,t3,env2,_) as tt -> eval ((TmApp(fi,TmFix(fi),tt))::env2) t3
-         | _ -> failwith "Incorrect CFix")
-       (* If-expression *)
-       | TmIfexp(fi,x1,x2) ->
+          | TmClos(fi,x,t3,env2,_) as tt -> eval ((TmApp(fi,TmFix(fi),tt))::env2) t3
+          | _ -> failwith "Incorrect CFix")
+      (* If-expression *)
+      | TmIfexp(fi,x1,x2) ->
          (match x1,x2,eval env t2 with
-         | None,None,TmConst(fi,CBool(b)) -> TmIfexp(fi,Some(b),None)
-         | Some(b),Some(TmClos(_,_,t3,env3,_)),TmClos(_,_,t4,env4,_) ->
-              if b then eval (TmNop::env3) t3 else eval (TmNop::env4) t4
-         | Some(b),_,(TmClos(_,_,t3,_,_) as v3) -> TmIfexp(fi,Some(b),Some(v3))
-         | _ -> raise_error fi "Incorrect if-expression in the eval function.")
-       | _ -> raise_error fi "Application to a non closure value.")
-  (* Constant *)
+          | None,None,TmConst(fi,CBool(b)) -> TmIfexp(fi,Some(b),None)
+          | Some(b),Some(TmClos(_,_,t3,env3,_)),TmClos(_,_,t4,env4,_) ->
+             if b then eval (TmNop::env3) t3 else eval (TmNop::env4) t4
+          | Some(b),_,(TmClos(_,_,t3,_,_) as v3) -> TmIfexp(fi,Some(b),Some(v3))
+          | _ -> raise_error fi "Incorrect if-expression in the eval function.")
+      | _ -> raise_error fi "Application to a non closure value.")
   | TmConst(_,_) | TmFix(_) | TmPEval(_) -> t
+  | TmLater(_) | TmNow(_) ->  t
   (* If expression *)
   | TmIfexp(fi,_,_) -> t
   (* The rest *)
@@ -612,21 +734,116 @@ let rec eval env t =
   | TmNop -> t
 
 
-(* Main function for evaluation a function. Performs lexing, parsing
-   and evaluation. Does not perform any type checking *)
+
+
+type tree = Node of (tree * int) * (tree * int) | Lam of tree * int | Leaf
+
+(* Main evaluation loop of a term. Evaluates using big-step semantics *)
+let rec preeval t =
+  match t with
+  | TmApp(fi,t1,t2) ->
+     inc_count();
+     let (trl, nl) = preeval t1 in
+     let (trr, nr) = preeval t2 in
+     (Node((trl,nl),(trr,nr)), (nl + nr + 1))
+  | TmClos(fi,x,t1,_,_)
+    | TmLam(fi,x,t1) ->
+     let (tr, n) = preeval t1 in
+     (Lam (tr,n), n)
+  | TmVar(fi,x,n,_) -> (Leaf, 1)
+  (* Lambda and closure conversions *)
+  | _ ->
+     (Leaf, 1)
+
+
+let rec insertparr t n l =
+  match t with
+  | TmApp(fi,TmConst(fii,c),t2) ->
+     (* let (nn,nt,nl) = insertparr t2 n l in *)
+     (n, TmApp(fi,TmConst(fii,c), t2), l)
+  | TmApp(fi,t1,t2) ->
+     (* let t1',l1 =
+      *   match l with
+      *     li::ls when li == n -> TmApp(fi,TmConst(fi, Clater(Some 0.1)), t1), ls
+      *   | _ -> t1,l
+      * in *)
+     let l' =
+       match l with
+         li::ls when li == n ->  ls
+       | _ -> l
+     in
+     let (nl,t1',l1) = insertparr t1 (n+1) l' in
+     let (nr,t2',l2) = insertparr t2 (nl+1) l1 in 
+     let t2'' =
+       match l with
+         li::ls when li == n -> TmApp(fi,TmConst(fi, Clater(Some 0.1)), t2')
+       | _ -> t2'
+     in
+     (nr,TmApp(fi,t1',t2''),l2)
+  (* Lambda and closure conversions *)
+  | TmClos(fi,x,t1,env,sth) ->
+     let (nn,nt,nl) = insertparr t1 n l in
+     (nn, TmClos(fi,x,nt,env,sth), nl)
+
+  | TmLam(fi,x,t1) ->
+     let (nn,nt,nl) = insertparr t1 n l in
+     (nn, TmLam(fi,x,nt), nl)
+       
+  (* | TmVar(fi,x,n,sth) -> (, , ) *)
+  | _ -> (n,t,l)
+
+
+let draw tree =
+  let rec print indent tree =
+    match tree with
+       Leaf -> 
+        printf "%s%d\n" indent 1
+     | Lam (tree, n) ->
+        printf "%sllll\n" indent;
+        print (indent) tree;
+        printf "%sllll\n" indent;
+     | Node ((left, nl), (right, nr)) ->
+        printf "%s----\n" indent;
+        print (indent ^ "| ") left;
+        printf "%s(%d,%d)\n" indent nl nr;
+        print (indent ^ "| ") right;
+        printf "%s----\n" indent
+  in
+  print "" tree
+        
+(* let rec print_tree tree =
+ *   match tr with
+ *   | Node ((tl,nl),(tr,nr)) ->
+ *      printf "%d--------------%d\n" nl nr
+ *        print_tree tl;
+ *      print_tree tr;
+ *   | Leaf ->
+ *      printf "" *)
+     
 let evalprog filename  =
   if !utest then printf "%s: " filename;
   utest_fail_local := 0;
   let fs1 = open_in filename in
   let tablength = 8 in
   begin try
-    Lexer.init (us filename) tablength;
-    fs1 |> Ustring.lexing_from_channel
+      let t =
+        Lexer.init (us filename) tablength;
+        fs1 |> Ustring.lexing_from_channel
         |> Parser.main Lexer.main
         |> debruijn (builtin |> List.split |> fst |> List.map us)
-        |> eval (builtin |> List.split |> snd |> List.map (fun x -> TmConst(NoInfo,x)))
-        |> fun _ -> ()
-
+      in
+      (* t |> preeval |> fst |> draw; *)
+      (* let s1 = pprint true t in
+       * printf "%s\n%!" (Ustring.to_utf8 s1); *)
+      let (_,t,_) = insertparr t 0 [1;2;10] in
+      (* let s2 = pprint true t in
+       * printf "%s\n%!" (Ustring.to_utf8 s2); *)
+      
+      let t1 = get_time() in
+      t |> eval (builtin |> List.split |> snd |> List.map (fun x -> TmConst(NoInfo,x)))
+      |> fun _ -> ();
+      let t2 = get_time() in
+      printf "No Applications %d\n No Domains %d\nElapsed time %f\n%!" (!count) (!count_threads) (t2 -. t1)      
     with
     | Lexer.Lex_error m ->
       if !utest then (
@@ -715,8 +932,8 @@ let main =
       if Ustring.ends_with (us".ppl") (us name) then
         (eval_atom := Ppl.eval_atom;
          (Ppl.evalprog debruijn eval builtin) name)
-      else if Ustring.ends_with (us".par") (us name) then
-        (Par.evalprog name)
+      (* else if Ustring.ends_with (us".par") (us name) then
+       *   (Par.evalprog name) *)
       else evalprog name)
 
   (* Show the menu *)

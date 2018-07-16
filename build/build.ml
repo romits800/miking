@@ -31,7 +31,7 @@ let rec cmd s =
 and cleanup_temp_files() =
   maindir();
   chdir bootdir;
-  rmfiles "*.cmo *.cmi *.cmx *.o lexer.ml parser.ml parser.mli ppllexer.ml pplparser.ml pplparser.mli";
+  rmfiles "*.cmo *.cmi *.cmx *.o lexer.ml parser.ml parser.mli ppllexer.ml parlexer.ml parparser.ml parparser.mli pplparser.ml pplparser.mli";
   maindir()
 
 
@@ -98,7 +98,7 @@ let should_recompile_bootstrappers() =
     s1 <> s2
 
 let build_bootstrappers() =
-  if true || win32 || command "ocamlbuild -version > /dev/null 2>&1" != 0 then (
+  if win32 || command "ocamlbuild -version > /dev/null 2>&1" != 0 then (
     (* boot *)
     printf "Building boot...\n";
     flush_all();
@@ -117,7 +117,7 @@ let build_bootstrappers() =
           "parparser.mli parlexer.ml parparser.ml par.ml " ^
           "boot.ml"))
   else (
-    cmd ("ocamlbuild -Is src/boot boot.native");
+    cmd ("ocamlbuild -lib unix -Is src/boot boot.native");
     cmd ("mv -f boot.native build/boot");
   )
 

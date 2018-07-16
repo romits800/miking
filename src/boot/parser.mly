@@ -2,8 +2,7 @@
    Miking is licensed under the MIT license.
    Copyright (C) David Broman. See file LICENSE.txt
 
-   parser.mly includes the grammar for parsing the two languages 'mcore' and
-   'Ragnar'. The latter is used for implementing the Miking compiler.
+   Modified copy of parser.mly for temporary parallel support. 
 */
 
 %{
@@ -30,6 +29,8 @@
       | TmConst(_,_) -> false
       | TmFix(_) -> false
       | TmPEval(_) -> false
+      | TmLater(_,_) -> false
+      | TmNow(_) -> false	
       | TmIfexp(_,_,None) -> false
       | TmIfexp(_,_,Some(t1)) -> hasx t1
       | TmChar(_,_) -> false
@@ -83,6 +84,9 @@
 %token <unit Ast.tokendata> FIX
 %token <unit Ast.tokendata> PEVAL
 %token <unit Ast.tokendata> IFEXP
+
+%token <unit Ast.tokendata> NOW
+%token <unit Ast.tokendata> LATER
 
 
 
@@ -171,12 +175,15 @@ mc_term:
       { let fi = mkinfo $1.i (tm_info $4) in
         TmApp(fi,TmLam(fi,$2.v,$6),$4) }
 
-
 mc_left:
   | mc_atom
       { $1 }
   | mc_left mc_atom
       { TmApp(NoInfo,$1,$2) }
+
+
+mc_int:
+  | UINT                 { TmConst($1.i,CInt($1.v)) }
 
 mc_atom:
   | LPAREN mc_term RPAREN   { $2 }
@@ -190,9 +197,9 @@ mc_atom:
   | NOP                  { TmNop }
   | FIX                  { TmFix($1.i) }
   | PEVAL                { TmPEval($1.i) }
+  | LATER                { TmConst($1.i, Clater(None) ) }
+  | NOW                  { TmConst($1.i, Cnow) }
   | IFEXP                { TmIfexp($1.i,None,None) }
-
-
 
 
 
@@ -348,6 +355,7 @@ pattern:
       {PatUC($1.i,$2,UCOrdered,UCMultivalued)}
   | FUNIDENT patseq RPAREN
       {PatIdent($1.i,$1.v)}
+
 
 commaop:
   | {}
