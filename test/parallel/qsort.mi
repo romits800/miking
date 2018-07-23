@@ -1,0 +1,104 @@
+
+language MCore
+
+// Functions with lists
+let nil = lam c:a. lam n:a. n
+let isnil = lam l:[a]. l (lam h:Bool. lam t:Bool. false) true
+let cons = lam h:Int. lam t:[Int]. lam c:a->a->a. lam n:Bool. c h (t c n)
+let head = lam l:[Int]. l (lam h:Int.lam t:[Int].h) false
+let tail = lam l:[Int]. lam c:a->a->a. lam n:Bool. l (lam h:Int.lam t:[Int].lam g:a->a->a. g h (t c)) (lam t:[Int].n) (lam h:Int.lam t:[Int].t)
+
+
+// list reverse
+// let rev = fix (lam rev: [Int] -> [Int] -> [Int].
+//     	      	   lam l:[Int]. lam res: [Int].
+//     ifexp (isnil l)
+//     (lam _:a. res)
+//     (lam _:a. rev (tail l) (cons (head l) res))
+// )
+// 
+// 
+// let appendint = fix (lam appendint: [Int] -> [Int] -> [Int].
+//     	      	    lam l1:[Int]. lam l2:[Int].
+// 
+// 		ifexp (isnil l1)
+// 		(lam _:a. l2)
+// 		(lam _:a. 
+// 			appendint (tail l1) (cons (head l1) l2)
+// 		)
+// 		)
+// 
+// let append = lam l1:[Int]. lam l2:[Int].
+// 		appendint (rev l1 nil) l2
+// 
+let append2 = fix (lam append2: [Int] -> [Int] -> [Int].
+    	      	    lam l1:[Int]. lam l2:[Int].
+		ifexp (isnil l1)
+		(lam _:a. l2)
+		(lam _:a. cons (head l1) (append2 (tail l1) l2)))
+		
+
+// let qsort l =
+//   let rec split l n ll lh =
+//     match l with
+//     | h::tail when h < n -> split tail n (h::ll) lh
+//     | h::tail -> split tail n ll (h::lh)
+//     | [] -> (ll,lh)
+//   in
+//   let rec qsort_i l =
+//     match l with
+//     | [] -> []
+//     | h::[] -> [h]
+//     | h::tail ->
+//        let ll, lh = split tail h [] (h::[]) in
+//        (qsort_i ll) @ (qsort_i lh)
+//   in
+//   qsort_i l
+
+
+let split = fix (lam split: [Int] -> Int -> [Int] -> [Int] -> [Int].
+    	      	 lam l:[Int]. lam n:Int. lam ll:[Int]. lam lh:[Int].
+		 ifexp (isnil l)
+		 (lam _:a. cons ll (cons lh nil))
+		 (lam _:a.
+		      let tl = tail l in
+		      let hl = head l in
+		      ifexp (lti hl n)
+		       (lam _:a.
+		       	    split tl n (cons  hl ll)  lh)
+		       (lam _:a.
+		       	    split tl n    ll      (cons hl lh))
+		)
+		)
+
+
+
+let qsort_i = fix (lam qsort_i: [Int] -> [Int] .
+    	      	  lam l:[Int].
+    ifexp (isnil l)	  
+    (lam _:a. nil)
+    (lam _:a.
+        ifexp (isnil (tail l))
+	(lam _:a.l)
+	(lam _:a.
+	     let hl = head l in
+	     let lllh = split (tail l) hl nil (cons hl nil) in
+	     //let res = qsort_i (tail l) in
+	     //res=
+	     let hl = head lllh in
+	     let tl = head (tail lllh) in
+	     let l2 = qsort_i tl in
+	     let l1 = qsort_i hl in
+	     append2 l1 l2
+	     //hl
+       )
+    )
+)
+
+let qsort = lam l:[Int].qsort_i l
+
+// utest false (isnil (qsort (cons 1 nil)))
+//utest true (isnil (append nil nil))
+//utest 2 (head (tail (qsort (cons 523 (cons 753 (cons 2 (cons 1 nil)))))))
+
+utest 1 (head (qsort (cons 955 (cons 753 (cons 1093 (cons 1910 (cons 887 (cons 1178 (cons 1142 (cons 1834 (cons 1008 (cons 1074 (cons 660 (cons 116 (cons 1194 (cons 915 (cons 1799 (cons 30 (cons 1010 (cons 260 (cons 1396 (cons 391 (cons 1255 (cons 301 (cons 563 (cons 1388 (cons 784 (cons 344 (cons 1111 (cons 331 (cons 914 (cons 599 (cons 794 (cons 422 (cons 622 (cons 1421 (cons 449 (cons 1779 (cons 686 (cons 1787 (cons 1066 (cons 483 (cons 112 (cons 1451 (cons 1172 (cons 168 (cons 292 (cons 906 (cons 273 (cons 924 (cons 752 (cons 203 (cons 1137 (cons 1977 (cons 1089 (cons 159 (cons 513 (cons 850 (cons 791 (cons 498 (cons 614 (cons 1239 (cons 1063 (cons 1312 (cons 1438 (cons 204 (cons 1751 (cons 1230 (cons 166 (cons 365 (cons 1025 (cons 1011 (cons 1416 (cons 1921 (cons 1747 (cons 1084 (cons 272 (cons 927 (cons 1661 (cons 1669 (cons 1691 (cons 221 (cons 294 (cons 1372 (cons 671 (cons 327 (cons 1504 (cons 305 (cons 755 (cons 1114 (cons 1729 (cons 1020 (cons 996 (cons 579 (cons 1469 (cons 1696 (cons 1688 (cons 602 (cons 73 (cons 821 (cons 1753 (cons 497 (cons 824 (cons 38 (cons 1413 (cons 923 (cons 980 (cons 527 (cons 1518 (cons 632 (cons 774 (cons 1169 (cons 874 (cons 1289 (cons 143 (cons 956 (cons 866 (cons 276 (cons 1012 (cons 169 (cons 1182 (cons 499 (cons 783 (cons 394 (cons 1818 (cons 688 (cons 170 (cons 1214 (cons 1115 (cons 339 (cons 944 (cons 298 (cons 1694 (cons 4 (cons 815 (cons 209 (cons 1760 (cons 1026 (cons 177 (cons 538 (cons 723 (cons 415 (cons 1157 (cons 23 (cons 878 (cons 1871 (cons 779 (cons 436 (cons 473 (cons 467 (cons 1173 (cons 429 (cons 897 (cons 733 (cons 959 (cons 61 (cons 1480 (cons 1736 (cons 319 (cons 1608 (cons 1529 (cons 266 (cons 1626 (cons 1017 (cons 567 (cons 1968 (cons 1638 (cons 1583 (cons 215 (cons 974 (cons 1233 (cons 181 (cons 903 (cons 1145 (cons 1064 (cons 226 (cons 1131 (cons 228 (cons 1056 (cons 1353 (cons 552 (cons 1567 (cons 1976 (cons 466 (cons 503 (cons 1985 (cons 463 (cons 1649 (cons 1110 (cons 1875 (cons 1185 (cons 1987 (cons 1609 (cons 1200 (cons 1970 (cons 1665 (cons 122 (cons 1807 (cons 1925 (cons 762 (cons 1238 (cons 851 (cons 1090 (cons 1370 (cons 951 (cons 427 (cons 1814 (cons 1176 (cons 20 (cons 1262 (cons 1786 (cons 1569 (cons 64 (cons 1561 (cons 1218 (cons 1251 (cons 1898 (cons 807 (cons 1829 (cons 1159 (cons 1364 (cons 758 (cons 1690 (cons 1083 (cons 1175 (cons 1957 (cons 1414 (cons 1741 (cons 1975 (cons 393 (cons 311 (cons 867 (cons 704 (cons 751 (cons 1013 (cons 99 (cons 1434 (cons 1791 (cons 833 (cons 610 (cons 1495 (cons 1213 (cons 1754 (cons 973 (cons 1112 (cons 373 (cons 633 (cons 1309 (cons 1228 (cons 678 (cons 1590 (cons 1917 (cons 806 (cons 343 (cons 89 (cons 271 (cons 308 (cons 1354 (cons 1494 (cons 100 (cons 1264 (cons 661 (cons 1689 (cons 481 (cons 1346 (cons 674 (cons 771 (cons 320 (cons 348 (cons 796 (cons 840 (cons 1651 (cons 1564 (cons 132 (cons 387 (cons 1904 (cons 1841 (cons 1283 (cons 291 (cons 399 (cons 760 (cons 668 (cons 360 (cons 1236 (cons 304 (cons 890 (cons 1 (cons 646 (cons 1163 (cons 960 (cons 269 (cons 92 (cons 575 (cons 245 (cons 3 (cons 1872 (cons 1180 (cons 160 (cons 1002 (cons 1168 (cons 210 (cons 714 (cons 1409 (cons 465 (cons 147 (cons 819 (cons 1037 (cons 928 (cons 1876 (cons 1043 (cons 1646 (cons 709 (cons 313 (cons 1611 (cons 556 (cons 359 (cons 1188 (cons 184 (cons 1719 (cons 1124 (cons 1631 (cons 534 (cons 746 (cons 911 (cons 388 (cons 1081 (cons 117 (cons 757 (cons 106 (cons 1068 (cons 663 (cons 808 (cons 33 (cons 985 (cons 1994 (cons 155 (cons 66 (cons 1033 (cons 59 (cons 146 (cons 859 (cons 374 (cons 1257 (cons 994 (cons 297 (cons 1040 (cons 1830 (cons 1883 (cons 53 (cons 1924 (cons 442 (cons 1073 (cons 530 (cons 764 (cons 1773 (cons 905 (cons 1979 (cons 197 (cons 1765 (cons 650 (cons 225 (cons 621 (cons 1402 (cons 1091 (cons 1634 (cons 325 (cons 1330 (cons 1323 (cons 1802 (cons 1467 (cons 1758 (cons 596 (cons 1887 (cons 832 (cons 1449 (cons 1356 (cons 1485 (cons 1475 (cons 1810 (cons 849 (cons 1877 (cons 854 (cons 590 (cons 1420 (cons 1209 (cons 426 (cons 1851 (cons 1726 (cons 1929 (cons 137 (cons 86 (cons 1459 (cons 1332 (cons 347 (cons 238 (cons 176 (cons 1501 (cons 1197 (cons 778 (cons 1150 (cons 417 (cons 403 (cons 748 (cons 1978 (cons 1592 (cons 1374 (cons 1680 (cons 14 (cons 1595 (cons 1882 (cons 1430 (cons 1750 (cons 535 (cons 838 (cons 1196 (cons 385 (cons 1070 (cons 1936 (cons 1387 (cons 731 (cons 1668 (cons 472 (cons 372 (cons 634 (cons 1327 (cons 1098 (cons 520 (cons 889 (cons 502 (cons 843 (cons 397 (cons 84 (cons 302 (cons 562 (cons 728 (cons 910 (cons 1543 (cons 1581 (cons 687 (cons 637 (cons 1837 (cons 828 (cons 598 (cons 1953 (cons 172 (cons 72 (cons 1326 (cons 703 (cons 1397 (cons 1183 (cons 1297 (cons 539 (cons 1951 (cons 1788 (cons 870 (cons 125 (cons 938 (cons 971 (cons 377 (cons 509 (cons 421 (cons 1499 (cons 1165 (cons 1392 (cons 1724 (cons 1601 (cons 672 (cons 1429 (cons 1537 (cons 1339 (cons 46 (cons 943 (cons 1225 (cons 1005 (cons 103 (cons 799 (cons 504 (cons 350 (cons 991 (cons 1210 (cons 1329 (cons 1440 (cons 451 (cons 1285 (cons 270 (cons 700 (cons 1819 (cons 1085 (cons 576 (cons 173 (cons 1505 (cons 1604 (cons 1365 (cons 189 (cons 1067 (cons 487 (cons 856 (cons 736 (cons 1393 (cons 1656 (cons 310 (cons 295 nil))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))

@@ -117,7 +117,7 @@ let build_bootstrappers() =
           "parparser.mli parlexer.ml parparser.ml par.ml " ^
           "boot.ml"))
   else (
-    cmd ("ocamlbuild -lib unix -Is src/boot boot.native");
+    cmd ("ocamlbuild -lib unix -lib str -Is src/boot boot.native");
     cmd ("mv -f boot.native build/boot");
   )
 
@@ -155,6 +155,10 @@ let test() =
   in
     cmd (builddir ^ sl ^ "boot test " ^ lst)
 
+let parallel fname list max_threads =
+  let folder = "test" ^ sl ^ "parallel" ^ sl ^ fname in
+  cmd (builddir ^ sl ^ "boot parallel " ^ list ^ " " ^ max_threads ^ " " ^ folder)
+
 
 (************************************************************)
 (* Main program. Check arguments *)
@@ -169,6 +173,28 @@ let main =
   (* Script for doing regression testing *)
     build();
     test())
+  else if argv.(1) = "parallel" then (
+  (* Script for doing regression testing *)
+    build();
+    let fname =
+      if Array.length argv > 2 then
+        argv.(2)
+      else
+        ""
+    in
+    let list =
+      if Array.length argv > 3 then
+        argv.(3)
+      else
+        "\"\""
+    in
+    let max_threads =
+      if Array.length argv > 4 then
+        argv.(4)
+      else
+        "4"
+    in
+    parallel fname list max_threads)
   else
   (* Show error message *)
     printf "Unknown argument '%s'\n" argv.(1)

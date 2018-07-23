@@ -8,4 +8,4 @@
 #  dependent on Make.
 ###################################################
 
-ocaml build/build.ml $1 $2 $3
+ocaml build/build.ml $1 $2 $3 $4 $5 $6

@@ -20,11 +20,6 @@ open Pprint
 
 let prog_argv = ref []          (* Argv for the program that is executed *)
 
-module DelayedMap = Map.Make(struct type t = tm Domain.t
-                              let compare = compare end)
-          
-type dmap = (tm option Atomic.t) DelayedMap.t 
-              
 (* type delayedmap = { lab: int; dm: dmap} *)
 
 let get_time () =
@@ -39,27 +34,105 @@ let get_time () =
  *   let tm = f env t in
  *   dmready := DelayedMap.add l (Atomic.make t) !dmready *)
       
-let insert_dt f t =
-    Domain.spawn (fun () -> f t)
 
 (* let find_ready l =
  *   try
  *     Some (Atomic.get (DelayedMap.find l !dmready))
  *   with Not_found -> None *)
 
+module DelayedMap = Map.Make(struct type t = tm Domain.t
+                              let compare = compare end)
           
-let delayedmap = ref DelayedMap.empty
+type dmap = tm option DelayedMap.t 
+              
+
+          
+let delayedmap = Atomic.make DelayedMap.empty
 
 let find_dm d =
-  Atomic.get (DelayedMap.find d !delayedmap)
-  (* try
-   *   Some (Atomic.get (DelayedMap.find d !delayedmap))
-   * with Not_found -> None *)
+  let dm = Atomic.get delayedmap in
+  DelayedMap.find d dm
 
-let add_dm d tm =
-  (* let l = Domain.get_id d in *)
-  delayedmap := DelayedMap.add d (Atomic.make tm) !delayedmap
-                      
+let rec add_dm d tm =
+  let dm = Atomic.get delayedmap in
+  let dm' = DelayedMap.add d tm dm in
+  match (Atomic.compare_and_set delayedmap dm dm')
+  with
+    true -> ()
+  | false -> add_dm d tm
+
+
+let count = ref 0
+
+let inc_count () =
+  count := !count + 1
+
+let set_count_zero () =
+  count := 0
+
+
+let max_num_threads = ref 6
+
+let set_max_threads mt =
+  max_num_threads := mt
+
+
+let count_threads = Atomic.make 0
+
+let get_count_threads () = Atomic.get count_threads
+
+let set_count_threads num =
+  Atomic.set count_threads num
+
+let rec inc_count_threads () =
+  let oldv = Atomic.get count_threads in
+  let newv = oldv + 1 in
+  if newv <= !max_num_threads then (
+    match (Atomic.compare_and_set count_threads oldv newv)
+    with
+    | true -> Some newv
+    | false -> inc_count_threads()
+  )
+  else None
+
+let rec dec_count_threads () =
+  let oldv = Atomic.get count_threads in
+  let newv = oldv - 1 in
+  if newv <= !max_num_threads then (
+    match (Atomic.compare_and_set count_threads oldv newv)
+    with
+    | true -> Some newv
+    | false -> dec_count_threads()
+  )
+  else None
+
+let insert_dt f t =
+  match inc_count_threads() with
+    None -> None
+  | Some id ->
+     let d = Domain.spawn (fun () -> f t) in                (* printf "Threads created %d\n" (get_count_threads () ); *)
+     (* let d = insert_dt (fun t -> eval env t) t2  in *)
+     add_dm d None;
+                   (* TmConst (fi, CDelayed (f, d, id)) *)
+     Some (d,id)
+
+let get_dt d =
+  match find_dm d with
+  | None ->
+     let res = Domain.join d in
+     add_dm d (Some res);
+     (* dec_count_threads(); *)
+     res
+  | Some tm -> tm
+
+(* let rec dec_count_threads () = *)
+(*   let oldv = Atomic.get count_threads in *)
+(*   let newv = oldv - 1 in *)
+(*   match (Atomic.compare_and_set count_threads oldv newv) *)
+(*   with *)
+(*   | true -> () *)
+(*   | false -> dec_count_threads() *)
+
 (* let find_dt l =
  *   try
  *     Some (Atomic.get (DelayedMap.find l !dm.dm))
@@ -309,7 +382,10 @@ let delta c v  =
 
     | Caddi(None),TmConst(fi,CInt(v)) -> TmConst(fi,Caddi(Some(v)))
     | Caddi(Some(v1)),TmConst(fi,CInt(v2)) -> TmConst(fi,CInt(v1 + v2))
-    | Caddi(None),t | Caddi(Some(_)),t  -> fail_constapp (tm_info t)
+    | Caddi(None),t | Caddi(Some(_)),t  ->
+         let s1 = pprint true t in
+         printf "T %s\n%!" (Ustring.to_utf8 s1);
+failwith("Addi"); fail_constapp (tm_info t)
 
     | Csubi(None),TmConst(fi,CInt(v)) -> TmConst(fi,Csubi(Some(v)))
     | Csubi(Some(v1)),TmConst(fi,CInt(v2)) -> TmConst(fi,CInt(v1 - v2))
@@ -625,16 +701,16 @@ let files_of_folders lst = List.fold_left (fun a v ->
 ) [] lst
 
 
-let count = ref 0
+    
+  
+(*   (\* count_threads := !count_threads + 1 *\) *)
 
-let inc_count () =
-  count := !count + 1
+(* let dec_count_threads () = *)
+(*   Atomic.set count_threads ((Atomic.get count_threads) - 1) *)
+(*   (\* count_threads := !count_threads - 1 *\) *)
 
-let count_threads = ref 0
 
-let inc_count_threads () =
-  count_threads := !count_threads + 1
-
+  (* !count_threads *)
 
 (* Main evaluation loop of a term. Evaluates using big-step semantics *)
 let rec eval env t =
@@ -646,44 +722,47 @@ let rec eval env t =
   | TmLam(fi,x,t1) -> TmClos(fi,x,t1,env,false)
   | TmClos(fi,x,t1,env2,_) -> t
   (* Application *)
-  | TmConst(_,CDelayed(f,d,env)) ->
-     (try
-       let res = find_dm d in
-       match res with
-       | None ->
-          let res = Domain.join d in
-          add_dm d (Some res);
-          res
-       | Some tm -> tm
-      with _ ->
-            failwith ("CDelayed error");
+  | TmConst(_,CDelayed(f,d,id)) ->
+     ((* try *)
+       (* printf "Threads cdelayd %d %d\n%!" id (get_count_threads () ); *)
+       get_dt d
      )
          
   | TmApp(fi,t1,t2) ->
      (match eval env t1 with
       (* Closure application *)
-      | TmClos(fi,x,t3,env2,_) ->
+      | TmClos(fi,x,TmConst(fii, CDelayed (f, d, id)),env2,_) ->
+         (* let tn = eval env t2 in *)
+         (* eval (tn::env2) t3 *)
+         let t1' = get_dt d in
+         eval env (TmApp(fi,t1',t2))
+     | TmClos(fi,x,t3,env2,_) ->
          let tn = eval env t2 in
          eval (tn::env2) t3
       (* Constant application using the delta function *)
       | TmConst(_,Clater(Some f)) ->
          (
-            try
-              let d = insert_dt (fun t -> eval env t) t2  in
-              add_dm d None;
-              (* let id_d = Domain.get_id l *)
-                           
-              inc_count_threads();
-              TmConst (fi, CDelayed (f, d, env))
-            with _ ->
-              eval env t2
-          )
+           match insert_dt (fun t -> eval env t) t2  with
+             None -> eval env t2
+           | Some (d, id) ->
+              TmClos(fi,us"_", TmConst (fi, CDelayed (f, d, id)), env, false) 
+         )
        (* (match eval env t2 with
            * | TmClos(fi, s, t2, env,_) ->
            *    let l = insert_dt (fun t2 -> eval (TmNop::env) t2) t2  in
            *    TmConst(fi, CDelayed (f, l, env))
            * | v2 -> delta (Clater (Some f)) v2) *)
-      | TmConst(fi,c) -> delta c (eval env t2)
+      | TmConst(fi,c) ->
+         let t2' = 
+           (match (eval env t2) with
+           | TmClos(fi,x,TmConst(fii, CDelayed (f, d, id)),env2,_) ->
+              (* let tn = eval env t2 in *)
+              (* eval (tn::env2) t3 *)
+              get_dt d
+           | t2' -> t2'
+           )
+         in
+           delta c t2'
       (* Partial evaluation *)
       | TmPEval(fi2) -> normalize env 0 (TmApp(fi,TmPEval(fi2),t2))
                         |> readback env 0 |> debug_after_peval |> eval env
@@ -700,7 +779,10 @@ let rec eval env t =
              if b then eval (TmNop::env3) t3 else eval (TmNop::env4) t4
           | Some(b),_,(TmClos(_,_,t3,_,_) as v3) -> TmIfexp(fi,Some(b),Some(v3))
           | _ -> raise_error fi "Incorrect if-expression in the eval function.")
-      | _ -> raise_error fi "Application to a non closure value.")
+      | _ ->
+         (* let s1 = pprint true ttt in *)
+         (* printf "T %s\n%!" (Ustring.to_utf8 s1); *)
+         raise_error fi "Application to a non closure value.")
   | TmConst(_,_) | TmFix(_) | TmPEval(_) -> t
   | TmLater(_) | TmNow(_) ->  t
   (* If expression *)
@@ -742,7 +824,7 @@ type tree = Node of (tree * int) * (tree * int) | Lam of tree * int | Leaf
 let rec preeval t =
   match t with
   | TmApp(fi,t1,t2) ->
-     inc_count();
+
      let (trl, nl) = preeval t1 in
      let (trr, nr) = preeval t2 in
      (Node((trl,nl),(trr,nr)), (nl + nr + 1))
@@ -755,42 +837,54 @@ let rec preeval t =
   | _ ->
      (Leaf, 1)
 
+let rec inbuildin envlist x =
+  match envlist with
+    l::ls when l = (Ustring.to_utf8 x) -> true
+  | l::ls -> inbuildin ls x
+  | [] -> false
+  
 
-let rec insertparr t n l =
+let rec insertparr t n na l envlist =
   match t with
+  | TmApp(fi,TmFix(c),t2) ->
+     let (nna, nn,nt,nl) = insertparr t2 n na l envlist in
+     (nna, nn, TmApp(fi,TmFix(c),nt), nl)
+  | TmApp(fi,TmVar(fii,x,num,sth),t2) when (inbuildin envlist x) ->
+     let (nna, nn,nt,nl) = insertparr t2 n na l envlist in
+     (nna, nn, TmApp(fi,TmVar(fii,x,num,sth),nt), nl)
   | TmApp(fi,TmConst(fii,c),t2) ->
-     (* let (nn,nt,nl) = insertparr t2 n l in *)
-     (n, TmApp(fi,TmConst(fii,c), t2), l)
+     let (nna,nn,nt,nl) = insertparr t2 n na l envlist in
+     (nna, nn, TmApp(fi,TmConst(fii,c),nt), nl)
+  | TmApp(fi,TmIfexp(fii,b,e),t2)  ->
+     let (nna,nn,nt,nl) = insertparr t2 n na l envlist in
+     (nna, nn, TmApp(fi,TmIfexp(fii,b,e),nt), nl)
+  | TmApp(fi,t1,TmLam(fii,x,t2)) when x = us "_" ->
+     let (nal, nl,t1',l1) = insertparr t1 n na l envlist in
+     let (nar, nr,t2',l2) = insertparr t2 nl nal l1 envlist in
+     (nar, nr, TmApp(fi,t1', TmLam(fii,x,t2')), l2)
   | TmApp(fi,t1,t2) ->
-     (* let t1',l1 =
-      *   match l with
-      *     li::ls when li == n -> TmApp(fi,TmConst(fi, Clater(Some 0.1)), t1), ls
-      *   | _ -> t1,l
-      * in *)
-     let l' =
-       match l with
-         li::ls when li == n ->  ls
-       | _ -> l
-     in
-     let (nl,t1',l1) = insertparr t1 (n+1) l' in
-     let (nr,t2',l2) = insertparr t2 (nl+1) l1 in 
-     let t2'' =
-       match l with
-         li::ls when li == n -> TmApp(fi,TmConst(fi, Clater(Some 0.1)), t2')
-       | _ -> t2'
-     in
-     (nr,TmApp(fi,t1',t2''),l2)
+    let (nal, nl,t1',l1) = insertparr t1 n na l envlist in
+    let (nar, nr,t2',l2) = insertparr t2 nl nal l1 envlist in
+    let n' = nr + 1 in
+    let na' = if nr != nl then (inc_count(); nar + 1) else nar in
+    (* printf "Nr Nl: %d %d\n%!" nr nl ; *)
+    let l',t2'' =
+      match l2 with
+        li::ls when (li = na') &&  nr != nl ->
+          (
+           (ls, TmApp(fi,TmConst(fi, Clater(Some 0.1)), t2'))
+          )
+      | _ -> (l2, t2')
+    in
+    (na',n',TmApp(fi,t1',t2''),l')
   (* Lambda and closure conversions *)
   | TmClos(fi,x,t1,env,sth) ->
-     let (nn,nt,nl) = insertparr t1 n l in
-     (nn, TmClos(fi,x,nt,env,sth), nl)
-
+     let (nna, nn,nt,nl) = insertparr t1 n na l envlist in
+     (nna, nn, TmClos(fi,x,nt,env,sth), nl)
   | TmLam(fi,x,t1) ->
-     let (nn,nt,nl) = insertparr t1 n l in
-     (nn, TmLam(fi,x,nt), nl)
-       
-  (* | TmVar(fi,x,n,sth) -> (, , ) *)
-  | _ -> (n,t,l)
+     let (nna, nn,nt,nl) = insertparr t1 n na l envlist in
+     (nna, nn, TmLam(fi,x,nt), nl)       
+  | _ -> (na, n,t,l)
 
 
 let draw tree =
@@ -820,7 +914,7 @@ let draw tree =
  *   | Leaf ->
  *      printf "" *)
      
-let evalprog filename  =
+let evalprog filename list  =
   if !utest then printf "%s: " filename;
   utest_fail_local := 0;
   let fs1 = open_in filename in
@@ -832,18 +926,30 @@ let evalprog filename  =
         |> Parser.main Lexer.main
         |> debruijn (builtin |> List.split |> fst |> List.map us)
       in
-      (* t |> preeval |> fst |> draw; *)
-      (* let s1 = pprint true t in
-       * printf "%s\n%!" (Ustring.to_utf8 s1); *)
-      let (_,t,_) = insertparr t 0 [1;2;10] in
-      (* let s2 = pprint true t in
-       * printf "%s\n%!" (Ustring.to_utf8 s2); *)
+      let env =
+        builtin |> List.split |> snd |> List.map (fun x -> TmConst(NoInfo,x))
+      in
+      let envlist =
+        builtin |> List.split |> fst
+      in
+
+      t |> preeval |> (fun x -> ()); (* |> fst |> draw; *)
+
+      let s1 = pprint true t in
+      printf "%s\n%!" (Ustring.to_utf8 s1);
+
+      set_count_zero ();
+      set_count_threads 0;
+      
+      let (_,_,t,_) = insertparr t 0 0 (List.sort compare list) envlist in
+
+      let s2 = pprint true t in
+      printf "%s\n%!" (Ustring.to_utf8 s2);
       
       let t1 = get_time() in
-      t |> eval (builtin |> List.split |> snd |> List.map (fun x -> TmConst(NoInfo,x)))
-      |> fun _ -> ();
+      t |> eval env |> fun _ -> ();
       let t2 = get_time() in
-      printf "No Applications %d\n No Domains %d\nElapsed time %f\n%!" (!count) (!count_threads) (t2 -. t1)      
+      printf "\nNo Applications %d\n No Domains %d\nElapsed time %f\n%!" (!count) (Atomic.get count_threads) (t2 -. t1)      
     with
     | Lexer.Lex_error m ->
       if !utest then (
@@ -869,6 +975,7 @@ let evalprog filename  =
 	(Ustring.to_utf8 (Msg.message2str (Lexer.parse_error_message())))
   end; close_in fs1;
   if !utest && !utest_fail_local = 0 then printf " OK\n" else printf "\n"
+
 
 
 (* Define the file slash, to make it platform independent *)
@@ -913,7 +1020,29 @@ let main =
       if Ustring.ends_with (us".ppl") (us name) then
         (eval_atom := Ppl.eval_atom;
          (Ppl.evalprog debruijn eval builtin) name)
-      else evalprog name
+      else evalprog name []
+    in
+    (* Evaluate each of the programs in turn *)
+    List.iter eprog (files_of_folders lst);
+
+    (* Print out unit test results, if applicable *)
+    if !utest_fail = 0 then
+      printf "\nUnit testing SUCCESSFUL after executing %d tests.\n"
+        (!utest_ok)
+            else
+      printf "\nERROR! %d successful tests and %d failed tests.\n"
+        (!utest_ok) (!utest_fail))
+
+  | "parallel"::list::max_threads::lst | "p"::list::max_threads::lst -> (
+    utest := true;
+    printf "%s\n%!" list;
+    set_max_threads (int_of_string max_threads);
+    let plist = 
+      list |> Str.split (Str.regexp ";\\|\\[\\|\\]") |> List.map int_of_string
+    in
+    (* Select the lexer and parser, depending on the DSL*)
+    let eprog name =
+      evalprog name plist 
     in
     (* Evaluate each of the programs in turn *)
     List.iter eprog (files_of_folders lst);
@@ -934,7 +1063,7 @@ let main =
          (Ppl.evalprog debruijn eval builtin) name)
       (* else if Ustring.ends_with (us".par") (us name) then
        *   (Par.evalprog name) *)
-      else evalprog name)
+      else evalprog name [])
 
   (* Show the menu *)
   | _ -> menu())

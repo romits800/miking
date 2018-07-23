@@ -9,13 +9,16 @@
 #  the system, we just run the batch make file.
 ###################################################
 
-.PHONY : all test clean
+.PHONY : all test clean parallel
 
 all:
 	@./make
 
 test:
 	@./make test
+
+parallel:
+	@./make parallel "[0\;1]"
 
 clean:
 	@./make clean

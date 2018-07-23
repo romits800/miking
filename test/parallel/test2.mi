@@ -1,0 +1,61 @@
+
+language MCore
+
+// Functions with lists
+let nil = lam c:a. lam n:a. n
+let isnil = lam l:[a]. l (lam h:Bool. lam t:Bool. false) true
+let cons = lam h:Int. lam t:[Int]. lam c:a->a->a. lam n:Bool. c h (t c n)
+let head = lam l:[Int]. l (lam h:Int.lam t:[Int].h) false
+let tail = lam l:[Int]. lam c:a->a->a. lam n:Bool. l (lam h:Int.lam t:[Int].lam g:a->a->a. g h (t c)) (lam t:[Int].n) (lam h:Int.lam t:[Int].t)
+
+//utest true (isnil nil)
+//utest false (isnil (cons 2 (cons 3 nil)))
+//utest true (isnil (tail (tail (cons 2 (cons 3 nil)))))
+//utest 2 (head (cons 2 (cons 3 nil)))
+
+// Lazy fib
+let fiblazy = fix (lam fiblazy:Int->Int. lam n:Int.
+	     ifexp (leqi n 2)
+		(lam _:a. 1)
+	        (lam _:a.
+		     let n1 = (fiblazy (subi n 1)) in
+		     let n2 = (fiblazy (subi n 2)) in
+	             (addi (n1) (n2))
+	        )
+		
+	   )
+
+	   
+// let fiblazy2 = lam n:Int.
+// 	     ifexp (leqi n 2)
+// 		(lam _:a. 1)
+// 	        (lam _:a.
+// 		     let n1 = (fiblazy (subi n 1)) in
+// 		     let n2 = (fiblazy (subi n 2)) in
+// 	             (addi (n1) ( n2))
+// 	        )
+
+//let fiblazy3 = fix (lam fiblazy3:Int->Int. lam n:Int.
+//	     ifexp (leqi n 2)
+//		(lam _:a. 1)
+//
+//		(lam _:a.
+//		    ifexp (geqi n 28)
+//		       (lam _:a.
+//		       	    let n1 = (fiblazy3 (subi n 1)) in
+//		     	    let n2 = (fiblazy3 (subi n 2)) in
+//	             	    (addi (n1) ( n2))
+//		     	)
+//			(lam _:a.
+//		     	     let n1 = (fiblazy3 (subi n 1)) in
+//		     	     let n2 = (fiblazy3 (subi n 2)) in
+//	             	     (addi (n1) ( n2))
+//		     	)
+//		     )
+//		     )
+//
+
+//utest true (eqi 102334155 (fiblazy2 40))
+utest true (eqi 1346269 (fiblazy 31))	
+
+//utest true (eqi (later 0.1 (addi 1 2)) 3)

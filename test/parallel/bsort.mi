@@ -1,0 +1,61 @@
+
+language MCore
+
+// Functions with lists
+let nil = lam c:a. lam n:a. n
+let isnil = lam l:[a]. l (lam h:Bool. lam t:Bool. false) true
+let cons = lam h:Int. lam t:[Int]. lam c:a->a->a. lam n:Bool. c h (t c n)
+let head = lam l:[Int]. l (lam h:Int.lam t:[Int].h) false
+let tail = lam l:[Int]. lam c:a->a->a. lam n:Bool. l (lam h:Int.lam t:[Int].lam g:a->a->a. g h (t c)) (lam t:[Int].n) (lam h:Int.lam t:[Int].t)
+
+
+// list reverse
+let rev = fix (lam rev: [Int] -> [Int] -> [Int].
+    	      	   lam l:[Int]. lam res: [Int].
+    ifexp (isnil l)
+    (lam _:a. res)
+    (lam _:a. rev (tail l) (cons (head l) res))
+)
+
+
+
+let bsinner = fix (lam bsinner: [Int] -> [Int] -> [Int].
+    	      	       		lam l:[Int]. lam acc: [Int].
+    ifexp (isnil l)
+    (lam _:a. acc)
+    (lam _:a. 
+    	let t = tail l in
+	let hl = head l in
+	ifexp (isnil t)
+	(lam _:a. cons hl acc)
+	(lam _:a. 
+	    let ht = head t in
+	    ifexp (gti hl ht)		
+	    (lam _:a.
+	    let res = bsinner (cons hl (tail t)) (cons ht acc) in
+	    res )
+	    (lam _:a.
+	    let res = bsinner t (cons hl acc) in
+	    res )
+	)
+     ) 
+)
+
+let bsouter = fix (lam bsouter: [Int] -> [Int] -> [Int].
+    	      	       		lam l:[Int]. lam acc: [Int].
+    ifexp (isnil l)
+    (lam _:a. acc)
+    (lam _:a.
+        let nlist = bsinner l nil in
+	let hl = head nlist in
+	let tl = tail nlist in
+	let res = bsouter (rev tl nil) (cons hl acc) in
+	res
+    )
+)
+
+
+let bsort = lam l:[Int].bsouter l nil
+
+
+utest true (eqi 1 (head (bsort (cons 523 (cons 753 (cons 1093 (cons 1910 (cons 887 (cons 1178 (cons 1142 (cons 1834 (cons 1008 (cons 1074 (cons 660 (cons 116 (cons 1194 (cons 915 (cons 1799 (cons 30 (cons 1010 (cons 260 (cons 1396 (cons 391 (cons 1255 (cons 301 (cons 563 (cons 1388 (cons 784 (cons 344 (cons 1111 (cons 331 (cons 914 (cons 599 (cons 794 (cons 422 (cons 622 (cons 1421 (cons 449 (cons 1779 (cons 686 (cons 1787 (cons 1066 (cons 483 (cons 112 (cons 1451 (cons 1172 (cons 168 (cons 292 (cons 906 (cons 273 (cons 924 (cons 752 (cons 203 (cons 1137 (cons 1977 (cons 1089 (cons 159 (cons 513 (cons 850 (cons 791 (cons 498 (cons 614 (cons 1239 (cons 1063 (cons 1312 (cons 1438 (cons 204 (cons 1751 (cons 1230 (cons 166 (cons 365 (cons 1025 (cons 1011 (cons 1416 (cons 1921 (cons 1747 (cons 1084 (cons 1 (cons 927 (cons 1661 (cons 1669 (cons 1691 (cons 221 (cons 294 (cons 1372 (cons 671 (cons 327 (cons 1504 (cons 305 (cons 755 (cons 1114 (cons 1729 (cons 1020 (cons 996 (cons 579 (cons 1469 (cons 1696 (cons 1688 (cons 602 (cons 73 (cons 821 (cons 1753 (cons 497 (cons 824 (cons 38 (cons 1413 (cons 923 (cons 980 (cons 527 (cons 1518 (cons 632 (cons 774 (cons 1169 (cons 874 (cons 1289 (cons 143 (cons 956 (cons 866 (cons 276 (cons 1012 (cons 169 (cons 1182 (cons 499 (cons 783 (cons 394 (cons 1818 (cons 688 nil)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))

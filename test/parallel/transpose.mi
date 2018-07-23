@@ -1,0 +1,69 @@
+
+language MCore
+
+// Functions with lists
+let nil = lam c:a. lam n:a. n
+let isnil = lam l:[a]. l (lam h:Bool. lam t:Bool. false) true
+let cons = lam h:Int. lam t:[Int]. lam c:a->a->a. lam n:Bool. c h (t c n)
+let head = lam l:[Int]. l (lam h:Int.lam t:[Int].h) false
+let tail = lam l:[Int]. lam c:a->a->a. lam n:Bool. l (lam h:Int.lam t:[Int].lam g:a->a->a. g h (t c)) (lam t:[Int].n) (lam h:Int.lam t:[Int].t)
+
+
+// list reverse
+let rev = fix (lam rev: [Int] -> [Int] -> [Int].
+    	      	   lam l:[Int]. lam res: [Int].
+    ifexp (isnil l)
+    (lam _:a. res)
+    (lam _:a. rev (tail l) (cons (head l) res))
+)
+
+
+let trans_inner = fix (lam trans_inner: [Int] -> [[Int]] -> [[Int]].
+    		                lam a1: [Int].
+				lam a2: [[Int]].
+		   ifexp (isnil a1)	
+		       (lam _: a. nil)
+		       (lam _: a.
+		       	    ifexp (isnil a2)	
+		       	       (lam _: a.
+		      	   	  let ha = head a1 in
+			   	  let tl = (trans_inner (tail a1) nil) in
+			   	  cons (cons ha nil) tl		  
+				)
+				(lam _: a.
+		       	   	  let hr = head a2 in
+		      	   	  let ha = head a1 in
+			   	  let tl = (trans_inner (tail a1) (tail a2)) in
+			   	  cons (cons ha hr) tl
+				)
+		      )
+		    )
+
+let rev_each = fix (lam rev_each: [[Int]] -> [[Int]].
+    		                lam a1: [[Int]].
+		ifexp (isnil a1)
+		(lam _: a. nil )
+		(lam _: a.
+		     cons (rev (head a1) nil) (rev_each (tail a1))
+		)
+		
+
+
+let trans_outer = fix (lam trans_outer: [[Int]] -> [[Int]] -> [[Int]].
+    		                lam a1: [[Int]].
+				lam res: [[Int]].
+		   ifexp (isnil a1)	
+		       (lam _: a. rev_each res)
+		       (lam _: a.
+		      	   let ha = head a1 in
+			   let nres = trans_inner ha res in
+			   trans_outer (tail a1) nres
+			   
+			)
+		    )
+
+
+let sa1 = cons (cons 158 (cons 1955 (cons 648 (cons 3 nil)))) ( cons (cons 1172 (cons 727 (cons 876 (cons 88 nil)))) ( cons (cons 604 (cons 1766 (cons 291 (cons 91 nil)))) ( cons (cons 1172 (cons 727 (cons 876 (cons 88 nil)))) nil)))
+
+
+utest 158 (head (head (trans_outer sa1 nil )))

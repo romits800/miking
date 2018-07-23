@@ -101,7 +101,7 @@ and const =
 | CAtom of sid * tm list
 
 (* Parallel - *)
-| CDelayed of float * tm Domain.t * env 
+| CDelayed of float * tm Domain.t * int 
 (* | CDelayed of float * Domain.id * env *) 
 | Cnow (* of tm ref  option *) 
 | Clater of float option (* int * tm option *)
